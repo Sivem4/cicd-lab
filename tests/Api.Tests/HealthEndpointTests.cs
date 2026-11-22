@@ -15,6 +15,6 @@ public class HealthEndpointTests(WebApplicationFactory<Program> factory)
         var content = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("Broken", content);
+        Assert.Equal("Healthy", content);
     }
 }
