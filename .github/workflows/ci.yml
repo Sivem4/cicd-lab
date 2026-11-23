@@ -7,8 +7,35 @@ on:
     branches: [ main ]
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check modified paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'src/Api/**'
+              - 'tests/**'
+              - '*.sln'
+              - '*.slnx'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'src/Web/**'
+              - '.github/workflows/ci.yml'
+
   backend:
     name: Backend (.NET 10)
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +66,8 @@ jobs:
 
   frontend:
     name: Frontend (React + TS)
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -63,3 +92,25 @@ jobs:
 
       - name: Build & Typecheck
         run: npm run build
+
+  ci-gate:
+    name: CI Gate
+    needs: [changes, backend, frontend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify job statuses
+        run: |
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "Change detection failed."
+            exit 1
+          fi
+          if [[ "${{ needs.backend.result }}" == "failure" || "${{ needs.backend.result }}" == "cancelled" ]]; then
+            echo "Backend job failed or was cancelled."
+            exit 1
+          fi
+          if [[ "${{ needs.frontend.result }}" == "failure" || "${{ needs.frontend.result }}" == "cancelled" ]]; then
+            echo "Frontend job failed or was cancelled."
+            exit 1
+          fi
+          echo "All executed jobs passed!"
